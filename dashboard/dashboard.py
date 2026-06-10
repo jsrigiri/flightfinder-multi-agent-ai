@@ -4,8 +4,7 @@ import streamlit as st
 
 from app.agents.graph import build_graph
 
-
-os.environ["DISABLE_LLM"] = "true"
+from app.config import settings
 
 
 def run_search(criteria):

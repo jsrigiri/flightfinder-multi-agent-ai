@@ -1,7 +1,10 @@
 import os
 
+os.environ["USE_LIVE_GOOGLE_FLIGHTS"] = "false"
 os.environ["DISABLE_LLM"] = "true"
-os.environ["OLLAMA_MODEL"] = "llama3.2:1b"
+os.environ["SELENIUM_HEADLESS"] = "true"
+os.environ["KEEP_BROWSER_OPEN"] = "false"
+os.environ["DEBUG_GOOGLE_FLIGHTS"] = "false"
 
 from app.agents.graph import build_graph
 

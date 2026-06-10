@@ -2,6 +2,9 @@ from langgraph.graph import StateGraph, END
 
 from app.agents.llm import safe_llm_response, planner_prompt, report_prompt
 from app.models.schemas import AgentState
+from app.browser.google_flights import search_google_flights
+
+from app.config import settings
 
 
 def supervisor_agent(state: AgentState) -> AgentState:
@@ -784,7 +787,7 @@ def route_next(state: AgentState) -> str:
 def google_flights_agent(state: AgentState) -> AgentState:
     criteria = state["criteria"]
 
-    state["google_flights_results"] = [
+    fallback_results = [
         {
             "source": "Google Flights",
             "airline": "United",
@@ -795,11 +798,17 @@ def google_flights_agent(state: AgentState) -> AgentState:
             "destination": criteria["destination"],
             "destination_airport_name": "John F. Kennedy International Airport",
             "route": [
-                {"airport": "SFO", "airport_name": "San Francisco International Airport"},
-                {"airport": "JFK", "airport_name": "John F. Kennedy International Airport"},
+                {
+                    "airport": criteria["origin"],
+                    "airport_name": "San Francisco International Airport",
+                },
+                {
+                    "airport": criteria["destination"],
+                    "airport_name": "John F. Kennedy International Airport",
+                },
             ],
-            "departure_date_time": "2026-07-15 08:00",
-            "arrival_date_time": "2026-07-15 16:30",
+            "departure_date_time": f"{criteria['depart_date']} 08:00",
+            "arrival_date_time": f"{criteria['depart_date']} 16:30",
             "price": 420,
             "stops": 0,
             "checked_bags": 1,
@@ -811,6 +820,21 @@ def google_flights_agent(state: AgentState) -> AgentState:
             "layovers": [],
         }
     ]
+
+    if settings.USE_LIVE_GOOGLE_FLIGHTS:
+        google_result = search_google_flights(criteria)
+    else:
+        google_result = {
+            "success": False,
+            "results": [],
+        }
+
+    print(google_result)
+
+    if google_result.get("success") and google_result.get("results"):
+        state["google_flights_results"] = google_result["results"]
+    else:
+        state["google_flights_results"] = fallback_results
 
     return state
 

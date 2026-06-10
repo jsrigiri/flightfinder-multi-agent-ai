@@ -23,10 +23,13 @@ def build_chrome_driver(headless: bool = True):
 
 
 @contextmanager
-def browser_session(headless: bool = True):
+def browser_session(headless: bool = True, keep_open: bool = False):
     driver = build_chrome_driver(headless=headless)
 
     try:
         yield driver, WebDriverWait(driver, 20)
     finally:
+        if keep_open:
+            print("Debug mode: keeping browser open.")
+            input("Press Enter here to close browser...")
         driver.quit()

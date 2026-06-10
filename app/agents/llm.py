@@ -1,6 +1,8 @@
 import os
 import requests
 
+from app.config import settings
+
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 
@@ -19,13 +21,10 @@ def safe_llm_response(
     - Falls back gracefully if Ollama is unavailable.
     """
 
-    if os.getenv("DISABLE_LLM", "false").lower() == "true":
+    if settings.DISABLE_LLM:
         return fallback
 
-    model = os.getenv(
-        "OLLAMA_MODEL",
-        "llama3.2:1b",
-    )
+    model = settings.OLLAMA_MODEL
 
     try:
         response = requests.post(
