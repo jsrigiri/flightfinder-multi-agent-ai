@@ -11,9 +11,9 @@ def main():
             "depart_date": "2026-07-15",
             "return_date": None,
             "passengers": 1,
-            "max_price": 500,
+            "max_price": 550,
             "max_stops": 1,
-            "required_checked_bags": 1,
+            "required_checked_bags": 0,
         },
         "preferences": None,
         "plan": "",
@@ -24,7 +24,11 @@ def main():
         "errors": [],
         "completed": False,
         "report": "",
-        "scored_results": None,        
+        "scored_results": None,
+        "google_flights_results": None,
+        "expedia_results": None,
+        "kayak_results": None,
+        "merged_results": None,
     }
 
     result = graph.invoke(initial_state)

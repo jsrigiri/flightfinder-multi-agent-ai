@@ -24,3 +24,7 @@ class AgentState(TypedDict):
     errors: List[str]
     completed: bool
     scored_results: Optional[List[Dict[str, Any]]]
+    google_flights_results: Optional[List[Dict[str, Any]]]
+    expedia_results: Optional[List[Dict[str, Any]]]
+    kayak_results: Optional[List[Dict[str, Any]]]
+    merged_results: Optional[List[Dict[str, Any]]]

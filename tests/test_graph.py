@@ -185,3 +185,29 @@ def test_preferred_airline_and_nonstop_bonus_affect_score():
 
     if best["stops"] == 0 and result["preferences"]["prefer_nonstop"]:
         assert breakdown["nonstop_bonus"] == 5
+
+
+def test_multi_source_agents_return_results():
+    graph = build_graph()
+    result = graph.invoke(base_state())
+
+    assert result["google_flights_results"]
+    assert result["expedia_results"]
+    assert result["kayak_results"]
+
+
+def test_merge_agent_creates_merged_results():
+    graph = build_graph()
+    result = graph.invoke(base_state())
+
+    assert result["merged_results"]
+    assert result["search_results"] == result["merged_results"]
+
+
+def test_merged_results_include_source():
+    graph = build_graph()
+    result = graph.invoke(base_state())
+
+    for flight in result["merged_results"]:
+        assert "source" in flight
+        assert flight["source"]

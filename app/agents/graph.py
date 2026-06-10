@@ -11,8 +11,17 @@ def supervisor_agent(state: AgentState) -> AgentState:
     elif not state.get("plan"):
         state["next_agent"] = "planner"
 
-    elif not state.get("search_results"):
-        state["next_agent"] = "search"
+    elif state.get("google_flights_results") is None:
+        state["next_agent"] = "google_flights"
+
+    elif state.get("expedia_results") is None:
+        state["next_agent"] = "expedia"
+
+    elif state.get("kayak_results") is None:
+        state["next_agent"] = "kayak"
+
+    elif state.get("merged_results") is None:
+        state["next_agent"] = "merge"
 
     elif state.get("preferences") is None:
         state["next_agent"] = "preference"
@@ -772,6 +781,188 @@ def route_next(state: AgentState) -> str:
     return state["next_agent"]
 
 
+def google_flights_agent(state: AgentState) -> AgentState:
+    criteria = state["criteria"]
+
+    state["google_flights_results"] = [
+        {
+            "source": "Google Flights",
+            "airline": "United",
+            "flight_number": "UA 2381",
+            "aircraft_model": "Boeing 737-900",
+            "origin": criteria["origin"],
+            "origin_airport_name": "San Francisco International Airport",
+            "destination": criteria["destination"],
+            "destination_airport_name": "John F. Kennedy International Airport",
+            "route": [
+                {"airport": "SFO", "airport_name": "San Francisco International Airport"},
+                {"airport": "JFK", "airport_name": "John F. Kennedy International Airport"},
+            ],
+            "departure_date_time": "2026-07-15 08:00",
+            "arrival_date_time": "2026-07-15 16:30",
+            "price": 420,
+            "stops": 0,
+            "checked_bags": 1,
+            "carry_on_bags": 1,
+            "duration_minutes": 330,
+            "status": "On Time",
+            "delay_minutes": 0,
+            "legs": [],
+            "layovers": [],
+        }
+    ]
+
+    return state
+
+
+def expedia_agent(state: AgentState) -> AgentState:
+    criteria = state["criteria"]
+
+    state["expedia_results"] = [
+        {
+            "source": "Expedia",
+            "airline": "Delta",
+            "flight_number": "DL 1432 / DL 921",
+            "aircraft_model": "Airbus A321 / Boeing 757-200",
+            "origin": criteria["origin"],
+            "origin_airport_name": "San Francisco International Airport",
+            "destination": criteria["destination"],
+            "destination_airport_name": "John F. Kennedy International Airport",
+            "route": [
+                {"airport": "SFO", "airport_name": "San Francisco International Airport"},
+                {"airport": "ATL", "airport_name": "Hartsfield-Jackson Atlanta International Airport"},
+                {"airport": "JFK", "airport_name": "John F. Kennedy International Airport"},
+            ],
+            "departure_date_time": "2026-07-15 07:10",
+            "arrival_date_time": "2026-07-15 17:20",
+            "price": 390,
+            "stops": 1,
+            "checked_bags": 0,
+            "carry_on_bags": 1,
+            "duration_minutes": 370,
+            "status": "Delayed",
+            "delay_minutes": 20,
+            "legs": [
+                {
+                    "leg_number": 1,
+                    "airline": "Delta",
+                    "flight_number": "DL 1432",
+                    "aircraft_model": "Airbus A321",
+                    "origin": "SFO",
+                    "origin_airport_name": "San Francisco International Airport",
+                    "destination": "ATL",
+                    "destination_airport_name": "Hartsfield-Jackson Atlanta International Airport",
+                    "departure_date_time": "2026-07-15 07:10",
+                    "arrival_date_time": "2026-07-15 14:30",
+                    "status": "Delayed",
+                    "delay_minutes": 20,
+                    "duration_minutes": 260,
+                },
+                {
+                    "leg_number": 2,
+                    "airline": "Delta",
+                    "flight_number": "DL 921",
+                    "aircraft_model": "Boeing 757-200",
+                    "origin": "ATL",
+                    "origin_airport_name": "Hartsfield-Jackson Atlanta International Airport",
+                    "destination": "JFK",
+                    "destination_airport_name": "John F. Kennedy International Airport",
+                    "departure_date_time": "2026-07-15 15:25",
+                    "arrival_date_time": "2026-07-15 17:20",
+                    "status": "On Time",
+                    "delay_minutes": 0,
+                    "duration_minutes": 115,
+                },
+            ],
+            "layovers": [
+                {
+                    "airport": "ATL",
+                    "airport_name": "Hartsfield-Jackson Atlanta International Airport",
+                    "duration_minutes": 55,
+                }
+            ],
+        }
+    ]
+
+    return state
+
+
+def kayak_agent(state: AgentState) -> AgentState:
+    criteria = state["criteria"]
+
+    state["kayak_results"] = [
+        {
+            "source": "Kayak",
+            "airline": "American",
+            "flight_number": "AA 87",
+            "aircraft_model": "Airbus A321neo",
+            "origin": criteria["origin"],
+            "origin_airport_name": "San Francisco International Airport",
+            "destination": criteria["destination"],
+            "destination_airport_name": "John F. Kennedy International Airport",
+            "route": [
+                {"airport": "SFO", "airport_name": "San Francisco International Airport"},
+                {"airport": "JFK", "airport_name": "John F. Kennedy International Airport"},
+            ],
+            "departure_date_time": "2026-07-15 09:30",
+            "arrival_date_time": "2026-07-15 18:15",
+            "price": 510,
+            "stops": 0,
+            "checked_bags": 2,
+            "carry_on_bags": 1,
+            "duration_minutes": 345,
+            "status": "On Time",
+            "delay_minutes": 0,
+            "legs": [],
+            "layovers": [],
+        }
+    ]
+
+    return state
+
+
+def flight_key(flight: dict) -> tuple:
+    return (
+        flight["airline"],
+        flight["flight_number"],
+        flight["origin"],
+        flight["destination"],
+        flight["departure_date_time"],
+        flight["arrival_date_time"],
+    )
+
+
+def merge_agent(state: AgentState) -> AgentState:
+    all_results = []
+
+    all_results.extend(state.get("google_flights_results") or [])
+    all_results.extend(state.get("expedia_results") or [])
+    all_results.extend(state.get("kayak_results") or [])
+
+    deduped = {}
+
+    for flight in all_results:
+        key = flight_key(flight)
+
+        if key not in deduped:
+            deduped[key] = flight
+        else:
+            existing = deduped[key]
+
+            if flight["price"] < existing["price"]:
+                flight["source"] = f"{existing['source']}, {flight['source']}"
+                deduped[key] = flight
+            else:
+                existing["source"] = f"{existing['source']}, {flight['source']}"
+
+    merged = list(deduped.values())
+
+    state["merged_results"] = merged
+    state["search_results"] = merged
+
+    return state
+
+
 def build_graph():
     graph = StateGraph(AgentState)
 
@@ -783,6 +974,10 @@ def build_graph():
     graph.add_node("ranker", ranker_agent)
     graph.add_node("report", report_agent)
     graph.add_node("preference", preference_agent)
+    graph.add_node("google_flights", google_flights_agent)
+    graph.add_node("expedia", expedia_agent)
+    graph.add_node("kayak", kayak_agent)
+    graph.add_node("merge", merge_agent)
 
     graph.set_entry_point("supervisor")
 
@@ -797,6 +992,10 @@ def build_graph():
             "ranker": "ranker",
             "report": "report",
             "preference": "preference",
+            "google_flights": "google_flights",
+            "expedia": "expedia",
+            "kayak": "kayak",
+            "merge": "merge",
             "end": END,
         },
     )
@@ -808,5 +1007,9 @@ def build_graph():
     graph.add_edge("ranker", "supervisor")
     graph.add_edge("report", "supervisor")
     graph.add_edge("preference", "supervisor")
+    graph.add_edge("google_flights", "supervisor")
+    graph.add_edge("expedia", "supervisor")
+    graph.add_edge("kayak", "supervisor")
+    graph.add_edge("merge", "supervisor")
 
     return graph.compile()
