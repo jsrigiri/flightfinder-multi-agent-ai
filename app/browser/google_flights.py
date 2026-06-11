@@ -290,50 +290,71 @@ def extract_aircraft_and_flight_number(detail_text: str):
     }
 
 
-def enrich_first_flight_details(driver, flights: list):
-    if not flights:
-        return flights
-
-    items = driver.find_elements(By.CSS_SELECTOR, "ul.Rk10dc > li")
-
-    if not items:
-        return flights
-
-    first_item = items[0]
-
-    buttons = first_item.find_elements(
+def enrich_top_flight_details(driver, flights, top_n=3):
+    items = driver.find_elements(
         By.CSS_SELECTOR,
-        "button, [role='button']",
+        "ul.Rk10dc > li",
     )
 
-    detail_button = None
+    max_items = min(top_n, len(items), len(flights))
 
-    for button in buttons:
-        aria = button.get_attribute("aria-label") or ""
+    for index in range(max_items):
+        try:
+            items = driver.find_elements(
+                By.CSS_SELECTOR,
+                "ul.Rk10dc > li",
+            )
 
-        if "Flight details" in aria:
-            detail_button = button
-            break
+            item = items[index]
 
-    if detail_button is None:
-        return flights
+            buttons = item.find_elements(
+                By.CSS_SELECTOR,
+                "button, [role='button']",
+            )
 
-    driver.execute_script(
-        "arguments[0].click();",
-        detail_button,
-    )
+            detail_button = None
 
-    time.sleep(3)
+            for button in buttons:
+                aria = button.get_attribute("aria-label") or ""
 
-    detail_text = driver.find_element(
-        By.TAG_NAME,
-        "body",
-    ).text
+                if "Flight details" in aria:
+                    detail_button = button
+                    break
 
-    details = extract_aircraft_and_flight_number(detail_text)
+            if detail_button is None:
+                continue
 
-    flights[0]["flight_number"] = details["flight_number"]
-    flights[0]["aircraft_model"] = details["aircraft_model"]
+            driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center'});",
+                detail_button,
+            )
+
+            driver.execute_script(
+                "arguments[0].click();",
+                detail_button,
+            )
+
+            time.sleep(2)
+
+            expanded_item_text = item.text
+
+            details = extract_aircraft_and_flight_number(
+                expanded_item_text
+            )
+
+            flights[index]["flight_number"] = details["flight_number"]
+            flights[index]["aircraft_model"] = details["aircraft_model"]
+
+            # Collapse detail panel before next item
+            driver.execute_script(
+                "arguments[0].click();",
+                detail_button,
+            )
+
+            time.sleep(1)
+
+        except Exception as e:
+            print(f"Could not enrich flight {index}: {e}")
 
     return flights
 
@@ -609,9 +630,10 @@ def search_google_flights(criteria: dict):
                 max_results=settings.GOOGLE_FLIGHTS_MAX_RESULTS,
             )
 
-            parsed_results = enrich_first_flight_details(
+            parsed_results = enrich_top_flight_details(
                 driver,
                 parsed_results,
+                top_n=3,
             )
 
             print(f"Parsed Google Flights results: {len(parsed_results)}")
