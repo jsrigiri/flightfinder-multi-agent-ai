@@ -1,8 +1,6 @@
 {
   "flight_items": [
-    "ul.Rk10dc > li",
-    "[role='listitem']",
-    "li"
+    ".fake-selector-that-will-fail"
   ],
   "flight_details_button_aria_contains": "Flight details",
   "select_button_aria_contains": "Select flight",

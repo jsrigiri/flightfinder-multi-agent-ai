@@ -8,8 +8,23 @@ from app.browser.selenium_client import browser_session
 from app.browser.selector_registry import load_selector_map
 from app.browser.selector_registry import find_elements_by_selector_list
 from app.agents.skyvern_discovery_agent import discover_google_flights_selectors
+from app.browser.website_profile_registry import load_website_profile
 
 from app.config import settings
+
+
+def get_google_flights_profile():
+    return load_website_profile("google_flights")
+
+
+def get_google_flights_selectors():
+    profile = get_google_flights_profile()
+    return profile["selectors"]
+
+
+def get_google_flights_patterns():
+    profile = get_google_flights_profile()
+    return profile["text_patterns"]
 
 
 def parse_duration_minutes(duration_text: str) -> int:
@@ -297,7 +312,7 @@ def extract_aircraft_and_flight_number(detail_text: str):
 
 
 def enrich_top_flight_details(driver, flights, top_n=3):
-    selector_map = load_selector_map("google_flights")
+    selector_map = get_google_flights_selectors()
 
     items = find_elements_by_selector_list(
         driver,
@@ -308,7 +323,7 @@ def enrich_top_flight_details(driver, flights, top_n=3):
 
     for index in range(max_items):
         try:
-            selector_map = load_selector_map("google_flights")
+            selector_map = get_google_flights_selectors()
 
             items = find_elements_by_selector_list(
                 driver,
@@ -370,7 +385,7 @@ def enrich_top_flight_details(driver, flights, top_n=3):
 
 
 def select_first_departing_flight(driver, outbound_results):
-    selector_map = load_selector_map("google_flights")
+    selector_map = get_google_flights_selectors()
 
     items = find_elements_by_selector_list(
         driver,
@@ -651,7 +666,7 @@ def print_airline_elements(driver):
 
 
 def print_flight_list_items(driver):
-    selector_map = load_selector_map("google_flights")
+    selector_map = get_google_flights_selectors()
 
     items = find_elements_by_selector_list(
         driver,
@@ -684,7 +699,7 @@ def print_flight_list_items(driver):
 
 
 def inspect_first_flight_details(driver):
-    selector_map = load_selector_map("google_flights")
+    selector_map = get_google_flights_selectors()
 
     items = find_elements_by_selector_list(
         driver,

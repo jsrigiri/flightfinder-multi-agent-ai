@@ -1,0 +1,30 @@
+{
+  "site_name": "google_flights",
+  "base_url": "https://www.google.com/travel/flights",
+  "profile_version": 1,
+  "selectors": {
+    "flight_items": [
+      "ul.Rk10dc > li",
+      "[role='listitem']",
+      "li"
+    ],
+    "flight_details_button_aria_contains": "Flight details",
+    "select_button_aria_contains": "Select flight",
+    "baggage_button_aria_contains": "baggage allowance"
+  },
+  "text_patterns": {
+    "price": "\\$\\d+",
+    "duration": "\\d+ hr \\d+ min",
+    "flight_number": "(AA|DL|UA|AS|B6|WN|NK|F9)\\s*(\\d{1,4})",
+    "aircraft": [
+      "Airbus\\s+A\\d{3}(?:neo|ceo)?",
+      "Boeing\\s+\\d{3}(?:-\\d{3})?",
+      "Embraer\\s+E?\\d{3}"
+    ]
+  },
+  "actions": {
+    "open_details": "click button where aria contains Flight details",
+    "select_flight": "click button where aria contains Select flight"
+  },
+  "validated": true
+}
