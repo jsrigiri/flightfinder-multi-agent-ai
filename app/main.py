@@ -6,12 +6,13 @@ def main():
 
     initial_state = {
         "criteria": {
+            "trip_type": "Round Trip",
             "origin": "SFO",
             "destination": "JFK",
             "depart_date": "2026-07-15",
-            "return_date": None,
+            "return_date": "2026-11-11",
             "passengers": 1,
-            "max_price": 550,
+            "max_price": 1000,
             "max_stops": 1,
             "required_checked_bags": 0,
         },

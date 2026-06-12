@@ -588,6 +588,33 @@ ALTERNATIVE OPTIONS
 """.strip()
 
 
+def format_flight_detail_block(title: str, flight: dict) -> str:
+    route_text = " -> ".join(
+        [
+            airport["airport"]
+            for airport in flight.get("route", [])
+        ]
+    )
+
+    return f"""
+{title}
+{'-' * len(title)}
+Airline: {flight.get('airline', 'N/A')}
+Flight Number: {flight.get('flight_number', 'N/A')}
+Aircraft Model: {flight.get('aircraft_model', 'N/A')}
+Route: {route_text}
+Departure: {flight.get('departure_date_time', 'N/A')}
+Arrival: {flight.get('arrival_date_time', 'N/A')}
+Price: ${flight.get('price', 'N/A')}
+Stops: {flight.get('stops', 'N/A')}
+Checked Bags: {flight.get('checked_bags', 'N/A')}
+Carry-on Bags: {flight.get('carry_on_bags', 'N/A')}
+Duration: {flight.get('duration_minutes', 'N/A')} minutes
+Status: {flight.get('status', 'N/A')}
+Delay: {flight.get('delay_minutes', 'N/A')} minutes
+""".strip()
+
+
 def report_agent(state: AgentState) -> AgentState:
     flights = state["scored_results"]
 
@@ -624,6 +651,8 @@ None
     best = flights[0]
     alternatives = flights[1:3]
 
+    trip_type = best.get("trip_type", "One Way")
+
     route_text = " -> ".join(
         [
             airport["airport"]
@@ -632,6 +661,24 @@ None
     )
 
     score_breakdown = best.get("score_breakdown", {})
+
+    if trip_type == "Round Trip":
+        outbound = best.get("outbound_flight", {})
+        return_flight = best.get("return_flight", {})
+
+        round_trip_details = (
+            format_flight_detail_block(
+                "OUTBOUND FLIGHT",
+                outbound,
+            )
+            + "\n\n"
+            + format_flight_detail_block(
+                "RETURN FLIGHT",
+                return_flight,
+            )
+        )
+    else:
+        round_trip_details = ""
 
     if best.get("legs"):
         legs_text = "\n".join(
@@ -652,7 +699,10 @@ None
             ]
         )
     else:
-        legs_text = "Non-stop flight. No separate legs."
+        if trip_type == "Round Trip":
+            legs_text = "Round trip itinerary. See outbound and return flight sections."
+        else:
+            legs_text = "Non-stop flight. No separate legs."
 
     if best.get("layovers"):
         layover_text = "\n".join(
@@ -669,6 +719,7 @@ None
 
     if alternatives:
         alternative_lines = []
+
         for index, flight in enumerate(alternatives, start=2):
             alt_route = " -> ".join(
                 [
@@ -677,8 +728,11 @@ None
                 ]
             )
 
+            alt_trip_type = flight.get("trip_type", "One Way")
+
             alternative_lines.append(
-                f"{index}. {flight['airline']} | "
+                f"{index}. Trip Type: {alt_trip_type} | "
+                f"{flight['airline']} | "
                 f"Flight: {flight['flight_number']} | "
                 f"Aircraft: {flight['aircraft_model']} | "
                 f"Route: {alt_route} | "
@@ -692,12 +746,35 @@ None
                 f"Score: {flight.get('overall_score', 'N/A')}/100"
             )
 
+            if alt_trip_type == "Round Trip":
+                outbound = flight.get("outbound_flight", {})
+                return_flight = flight.get("return_flight", {})
+
+                alternative_lines.append(
+                    f"   Outbound: "
+                    f"{outbound.get('airline', 'N/A')} "
+                    f"{outbound.get('flight_number', 'N/A')} | "
+                    f"{outbound.get('aircraft_model', 'N/A')} | "
+                    f"{outbound.get('origin', 'N/A')} -> "
+                    f"{outbound.get('destination', 'N/A')}"
+                )
+
+                alternative_lines.append(
+                    f"   Return: "
+                    f"{return_flight.get('airline', 'N/A')} "
+                    f"{return_flight.get('flight_number', 'N/A')} | "
+                    f"{return_flight.get('aircraft_model', 'N/A')} | "
+                    f"{return_flight.get('origin', 'N/A')} -> "
+                    f"{return_flight.get('destination', 'N/A')}"
+                )
+
         alternatives_text = "\n".join(alternative_lines)
     else:
         alternatives_text = "None"
 
     explanation_prompt = f"""
 Use ONLY this data:
+Trip Type: {trip_type}
 Airline: {best['airline']}
 Price: {best['price']}
 Stops: {best['stops']}
@@ -708,13 +785,12 @@ Delay Minutes: {best['delay_minutes']}
 Overall Score: {best.get('overall_score')}
 
 Write exactly 2 sentences.
-Do not mention return date.
 Do not mention satisfaction.
 Do not invent anything.
 """
 
     fallback_explanation = (
-        "This flight was selected because it had the strongest deterministic score "
+        "This itinerary was selected because it had the strongest deterministic score "
         "after comparing stops, price, baggage allowance, duration, and delay time. "
         "It also matched the user's required filters."
     )
@@ -724,9 +800,20 @@ Do not invent anything.
         fallback_explanation,
     )
 
+    round_trip_section = ""
+
+    if trip_type == "Round Trip":
+        round_trip_section = f"""
+
+ROUND TRIP DETAILS
+------------------
+{round_trip_details}
+"""
+
     state["report"] = f"""
 FLIGHT SUMMARY
 --------------
+Trip Type: {trip_type}
 Airline: {best['airline']}
 Flight Number: {best['flight_number']}
 Aircraft Model: {best['aircraft_model']}
@@ -743,7 +830,7 @@ Duration: {best['duration_minutes']} minutes
 Flight Status: {best['status']}
 Delay: {best['delay_minutes']} minutes
 Overall Score: {best.get('overall_score', 'N/A')}/100
-
+{round_trip_section}
 SCORE BREAKDOWN
 ---------------
 Price Score: {score_breakdown.get('price_score', 'N/A')}
@@ -957,6 +1044,14 @@ def flight_key(flight: dict) -> tuple:
 
 
 def merge_agent(state: AgentState) -> AgentState:
+    if settings.USE_LIVE_GOOGLE_FLIGHTS:
+        google_results = state.get("google_flights_results") or []
+
+        state["merged_results"] = google_results
+        state["search_results"] = google_results
+
+        return state
+
     all_results = []
 
     all_results.extend(state.get("google_flights_results") or [])

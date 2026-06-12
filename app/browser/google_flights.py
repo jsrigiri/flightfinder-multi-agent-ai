@@ -5,6 +5,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 
 from app.browser.selenium_client import browser_session
+from app.browser.selector_registry import load_selector_map
+from app.browser.selector_registry import find_elements_by_selector_list
 
 from app.config import settings
 
@@ -51,6 +53,9 @@ def parse_google_flights_text(
 
     for i, line in enumerate(lines):
         if line not in airlines:
+            continue
+
+        if "Separate tickets" in lines[max(0, i - 3): i + 8]:
             continue
 
         try:
@@ -258,7 +263,7 @@ def extract_aircraft_and_flight_number(detail_text: str):
         ]
 
         flight_match = re.search(
-            r"([A-Z]{2})\s*(\d{1,4})",
+            r"(AA|DL|UA|AS|B6|WN|NK|F9)\s*(\d{1,4})",
             remainder,
         )
 
@@ -274,7 +279,7 @@ def extract_aircraft_and_flight_number(detail_text: str):
     if flight_number == "Not available":
 
         flight_match = re.search(
-            r"\b(AA|DL|UA|AS|B6|WN|NK|F9)\s*(\d{1,4})\b",
+            r"(AA|DL|UA|AS|B6|WN|NK|F9)\s*(\d{1,4})",
             normalized,
         )
 
@@ -291,18 +296,22 @@ def extract_aircraft_and_flight_number(detail_text: str):
 
 
 def enrich_top_flight_details(driver, flights, top_n=3):
-    items = driver.find_elements(
-        By.CSS_SELECTOR,
-        "ul.Rk10dc > li",
+    selector_map = load_selector_map("google_flights")
+
+    items = find_elements_by_selector_list(
+        driver,
+        selector_map["flight_items"],
     )
 
     max_items = min(top_n, len(items), len(flights))
 
     for index in range(max_items):
         try:
-            items = driver.find_elements(
-                By.CSS_SELECTOR,
-                "ul.Rk10dc > li",
+            selector_map = load_selector_map("google_flights")
+
+            items = find_elements_by_selector_list(
+                driver,
+                selector_map["flight_items"],
             )
 
             item = items[index]
@@ -317,7 +326,7 @@ def enrich_top_flight_details(driver, flights, top_n=3):
             for button in buttons:
                 aria = button.get_attribute("aria-label") or ""
 
-                if "Flight details" in aria:
+                if selector_map["flight_details_button_aria_contains"] in aria:
                     detail_button = button
                     break
 
@@ -357,6 +366,170 @@ def enrich_top_flight_details(driver, flights, top_n=3):
             print(f"Could not enrich flight {index}: {e}")
 
     return flights
+
+
+def select_first_departing_flight(driver, outbound_results):
+    selector_map = load_selector_map("google_flights")
+
+    items = find_elements_by_selector_list(
+        driver,
+        selector_map["flight_items"],
+    )
+
+    flight_items = [
+        item
+        for item in items
+        if "$" in item.text
+        and any(
+            airline in item.text
+            for airline in [
+                "American",
+                "Delta",
+                "United",
+                "Alaska",
+                "JetBlue",
+            ]
+        )
+    ]
+
+    if not flight_items:
+        raise RuntimeError("No departing flight items found")
+
+    first_item = flight_items[0]
+
+    buttons = first_item.find_elements(
+        By.CSS_SELECTOR,
+        "button, [role='button']",
+    )
+
+    detail_button = None
+    select_button = None
+
+    for button in buttons:
+        aria = button.get_attribute("aria-label") or ""
+
+        if "Flight details" in aria:
+            detail_button = button
+
+        if "Select flight" in aria:
+            select_button = button
+
+    if detail_button is not None:
+        driver.execute_script(
+            "arguments[0].click();",
+            detail_button,
+        )
+
+        time.sleep(2)
+
+        details = extract_aircraft_and_flight_number(
+            first_item.text
+        )
+
+        if outbound_results:
+            outbound_results[0]["flight_number"] = details["flight_number"]
+            outbound_results[0]["aircraft_model"] = details["aircraft_model"]
+
+    if select_button is None:
+        buttons = first_item.find_elements(
+            By.CSS_SELECTOR,
+            "button, [role='button']",
+        )
+
+        for button in buttons:
+            aria = button.get_attribute("aria-label") or ""
+
+            if "Select flight" in aria:
+                select_button = button
+                break
+
+    if select_button is None:
+        raise RuntimeError("No Select flight button found")
+
+    driver.execute_script(
+        "arguments[0].click();",
+        select_button,
+    )
+
+    time.sleep(5)
+
+    return outbound_results
+
+
+def build_round_trip_itineraries(outbound_flights, return_flights, top_n=3):
+    itineraries = []
+
+    count = min(len(outbound_flights), len(return_flights))
+
+    for index in range(count):
+        outbound = outbound_flights[index]
+        return_flight = return_flights[index]
+
+        if (
+            outbound.get("flight_number") == "Not available"
+            or outbound.get("aircraft_model") == "Not available"
+            or return_flight.get("flight_number") == "Not available"
+            or return_flight.get("aircraft_model") == "Not available"
+        ):
+            continue
+
+        itinerary = {
+            "source": "Google Flights",
+            "trip_type": "Round Trip",
+
+            "airline": f"{outbound['airline']} / {return_flight['airline']}",
+            "flight_number": (
+                f"{outbound['flight_number']} / "
+                f"{return_flight['flight_number']}"
+            ),
+            "aircraft_model": (
+                f"{outbound['aircraft_model']} / "
+                f"{return_flight['aircraft_model']}"
+            ),
+
+            "origin": outbound["origin"],
+            "origin_airport_name": outbound["origin_airport_name"],
+            "destination": outbound["destination"],
+            "destination_airport_name": outbound["destination_airport_name"],
+
+            "route": outbound["route"],
+
+            "departure_date_time": outbound["departure_date_time"],
+            "arrival_date_time": return_flight["arrival_date_time"],
+
+            "price": outbound["price"] + return_flight["price"],
+            "stops": outbound["stops"] + return_flight["stops"],
+
+            "checked_bags": min(
+                outbound["checked_bags"],
+                return_flight["checked_bags"],
+            ),
+            "carry_on_bags": min(
+                outbound["carry_on_bags"],
+                return_flight["carry_on_bags"],
+            ),
+
+            "duration_minutes": (
+                outbound["duration_minutes"]
+                + return_flight["duration_minutes"]
+            ),
+
+            "status": "Scheduled",
+            "delay_minutes": 0,
+
+            "outbound_flight": outbound,
+            "return_flight": return_flight,
+
+            "legs": [],
+            "layovers": (
+                outbound.get("layovers", [])
+                + return_flight.get("layovers", [])
+            ),
+        }
+
+        itineraries.append(itinerary)
+
+    return itineraries
 
 
 def print_buttons(driver):
@@ -477,7 +650,12 @@ def print_airline_elements(driver):
 
 
 def print_flight_list_items(driver):
-    items = driver.find_elements(By.CSS_SELECTOR, "ul.Rk10dc > li")
+    selector_map = load_selector_map("google_flights")
+
+    items = find_elements_by_selector_list(
+        driver,
+        selector_map["flight_items"],
+    )
 
     print("\nFLIGHT LIST ITEMS")
     print("-----------------")
@@ -505,7 +683,12 @@ def print_flight_list_items(driver):
 
 
 def inspect_first_flight_details(driver):
-    items = driver.find_elements(By.CSS_SELECTOR, "ul.Rk10dc > li")
+    selector_map = load_selector_map("google_flights")
+
+    items = find_elements_by_selector_list(
+        driver,
+        selector_map["flight_items"],
+    )
 
     if not items:
         print("No flight items found")
@@ -523,7 +706,7 @@ def inspect_first_flight_details(driver):
     for button in buttons:
         aria = button.get_attribute("aria-label") or ""
 
-        if "Flight details" in aria:
+        if selector_map["flight_details_button_aria_contains"] in aria:
             detail_button = button
             break
 
@@ -547,6 +730,94 @@ def inspect_first_flight_details(driver):
     ).text
 
     print(body_text[:8000])
+
+
+def inspect_trip_type_buttons(driver):
+    buttons = driver.find_elements(
+        By.CSS_SELECTOR,
+        "button, [role='button']"
+    )
+
+    print("\nTRIP TYPE BUTTONS")
+    print("-----------------")
+
+    for button in buttons:
+        try:
+            text = button.text.strip()
+            aria = button.get_attribute("aria-label")
+
+            if (
+                "Round" in text
+                or "One" in text
+                or "Multi" in text
+                or (aria and (
+                    "Round" in aria
+                    or "One" in aria
+                    or "Multi" in aria
+                ))
+            ):
+                print(
+                    "TEXT:",
+                    repr(text),
+                    "| ARIA:",
+                    repr(aria),
+                )
+
+        except Exception:
+            pass
+
+
+def build_google_flights_url(criteria):
+    origin = criteria["origin"]
+    destination = criteria["destination"]
+
+    trip_type = criteria.get(
+        "trip_type",
+        "Round Trip",
+    )
+
+    if trip_type == "One Way":
+
+        query = (
+            f"One way flights "
+            f"from {origin} "
+            f"to {destination}"
+        )
+
+    else:
+
+        query = (
+            f"Round trip flights "
+            f"from {origin} "
+            f"to {destination}"
+        )
+
+    return (
+        "https://www.google.com/travel/flights?q="
+        + query.replace(" ", "%20")
+    )
+
+
+def close_open_detail_panels(driver):
+    buttons = driver.find_elements(
+        By.CSS_SELECTOR,
+        "button, [role='button']",
+    )
+
+    for button in buttons:
+        try:
+            aria = button.get_attribute("aria-label") or ""
+
+            if aria == "Close dialog":
+                driver.execute_script(
+                    "arguments[0].click();",
+                    button,
+                )
+                time.sleep(1)
+                return
+
+        except Exception:
+            pass
 
 
 def set_text_input(driver, label_contains: str, value: str):
@@ -603,16 +874,13 @@ def set_text_input(driver, label_contains: str, value: str):
 def search_google_flights(criteria: dict):
     print("Google Flights Selenium adapter called")
 
-    origin = criteria["origin"]
-    destination = criteria["destination"]
-
-    url = (
-        "https://www.google.com/travel/flights"
-        f"?q=Flights%20from%20{origin}%20to%20{destination}"
-    )
+    url = build_google_flights_url(criteria)
 
     try:
-        with browser_session(headless=settings.SELENIUM_HEADLESS, keep_open=settings.KEEP_BROWSER_OPEN) as (driver, wait):
+        with browser_session(
+            headless=settings.SELENIUM_HEADLESS,
+            keep_open=settings.KEEP_BROWSER_OPEN,
+        ) as (driver, wait):
             driver.get(url)
 
             print("Loaded:", driver.title)
@@ -620,33 +888,85 @@ def search_google_flights(criteria: dict):
 
             time.sleep(5)
 
-            body_text = driver.find_element(By.TAG_NAME, "body").text
+            outbound_body_text = driver.find_element(
+                By.TAG_NAME,
+                "body",
+            ).text
 
-            print_flight_list_items(driver)
-
-            parsed_results = parse_google_flights_text(
-                body_text,
+            outbound_results = parse_google_flights_text(
+                outbound_body_text,
                 criteria,
                 max_results=settings.GOOGLE_FLIGHTS_MAX_RESULTS,
             )
 
-            parsed_results = enrich_top_flight_details(
-                driver,
-                parsed_results,
-                top_n=3,
+            if criteria.get("trip_type") == "Round Trip":
+                outbound_results = select_first_departing_flight(
+                    driver,
+                    outbound_results,
+                )
+
+                time.sleep(5)
+
+                return_body_text = driver.find_element(
+                    By.TAG_NAME,
+                    "body",
+                ).text
+
+                return_criteria = {
+                    **criteria,
+                    "origin": criteria["destination"],
+                    "destination": criteria["origin"],
+                    "depart_date": criteria.get("return_date"),
+                }
+
+                return_results = parse_google_flights_text(
+                    return_body_text,
+                    return_criteria,
+                    max_results=settings.GOOGLE_FLIGHTS_MAX_RESULTS,
+                )
+
+                if not return_results:
+                    print("No return flights found. Falling back to outbound results.")
+                    parsed_results = outbound_results
+                else:
+                    return_results = enrich_top_flight_details(
+                        driver,
+                        return_results,
+                        top_n=3,
+                    )
+
+                    parsed_results = build_round_trip_itineraries(
+                        outbound_results,
+                        return_results,
+                        top_n=3,
+                    )
+
+            else:
+                outbound_results = enrich_top_flight_details(
+                    driver,
+                    outbound_results,
+                    top_n=3,
+                )
+
+                parsed_results = outbound_results
+
+            print(
+                f"Parsed Google Flights results: "
+                f"{len(parsed_results)}"
             )
 
-            print(f"Parsed Google Flights results: {len(parsed_results)}")
-
-            inspect_first_flight_details(driver)
-
             if settings.DEBUG_GOOGLE_FLIGHTS:
+                body_text = driver.find_element(
+                    By.TAG_NAME,
+                    "body",
+                ).text
+
                 print("BODY TEXT SAMPLE")
                 print("----------------")
-                #print(body_text[:3000])
+                print(body_text[:3000])
 
             return {
-                "success": True,
+                "success": bool(parsed_results),
                 "source": "Google Flights",
                 "page_title": driver.title,
                 "current_url": driver.current_url,

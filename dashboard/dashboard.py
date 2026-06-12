@@ -41,9 +41,22 @@ st.caption("LangGraph + Ollama + Multi-Agent Flight Search")
 
 st.sidebar.header("Search Criteria")
 
+trip_type = st.sidebar.selectbox(
+    "Trip Type",
+    [
+        "Round Trip",
+        "One Way",
+    ],
+)
+
 origin = st.sidebar.text_input("Origin", "SFO")
 destination = st.sidebar.text_input("Destination", "JFK")
 depart_date = st.sidebar.date_input("Departure Date")
+
+return_date = None
+if trip_type == "Round Trip":
+    return_date = st.sidebar.date_input("Return Date")
+
 passengers = st.sidebar.number_input("Passengers", min_value=1, value=1)
 
 max_price = st.sidebar.slider("Max Price", 100, 2000, 550, 50)
@@ -62,6 +75,7 @@ avoid_airlines = st.sidebar.multiselect(
     default=["Spirit", "Frontier"],
 )
 
+
 prefer_nonstop = st.sidebar.checkbox("Prefer Nonstop", value=True)
 redeye_allowed = st.sidebar.checkbox("Redeye Allowed", value=False)
 
@@ -74,10 +88,15 @@ max_layover_minutes = st.sidebar.slider(
 )
 
 criteria = {
+    "trip_type": trip_type,
     "origin": origin.upper(),
     "destination": destination.upper(),
     "depart_date": str(depart_date),
-    "return_date": None,
+    "return_date": (
+        str(return_date)
+        if return_date
+        else None
+    ),
     "passengers": passengers,
     "max_price": max_price,
     "max_stops": max_stops,
@@ -87,7 +106,20 @@ criteria = {
     "prefer_nonstop": prefer_nonstop,
     "max_layover_minutes": max_layover_minutes,
     "redeye_allowed": redeye_allowed,
+    
 }
+
+st.info(
+    f"{criteria['trip_type']} | "
+    f"{criteria['origin']} → "
+    f"{criteria['destination']} | "
+    f"Departure: {criteria['depart_date']}"
+)
+
+if criteria["return_date"]:
+    st.info(
+        f"Return: {criteria['return_date']}"
+    )
 
 if st.sidebar.button("Search Flights"):
     result = run_search(criteria)
