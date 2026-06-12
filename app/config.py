@@ -52,5 +52,20 @@ class Settings:
         "false",
     ).lower() == "true"
 
+    USE_SKYVERN_DISCOVERY = os.getenv(
+        "USE_SKYVERN_DISCOVERY",
+        "false",
+    ).lower() == "true"
+
+    SKYVERN_API_URL = os.getenv(
+        "SKYVERN_API_URL",
+        "http://localhost:8000",
+    )
+
+    SKYVERN_API_KEY = os.getenv(
+        "SKYVERN_API_KEY",
+        "",
+    )
+
 
 settings = Settings()

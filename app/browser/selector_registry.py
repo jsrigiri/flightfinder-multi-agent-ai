@@ -1,6 +1,9 @@
 import json
 from pathlib import Path
 
+from app.agents.skyvern_discovery_agent import (
+    discover_google_flights_selectors,
+)
 
 SELECTOR_MAP_DIR = Path(__file__).parent / "selector_maps"
 
@@ -33,7 +36,7 @@ def save_selector_map(site_name: str, selector_map: dict) -> None:
         )
 
 
-def find_elements_by_selector_list(driver, selectors: list):
+def find_elements_by_selector_list(driver, selectors):
     for selector in selectors:
         elements = driver.find_elements(
             "css selector",
@@ -42,5 +45,20 @@ def find_elements_by_selector_list(driver, selectors: list):
 
         if elements:
             return elements
+
+    #
+    # Selenium failed
+    #
+    discovery = discover_google_flights_selectors()
+
+    if discovery.get("updated"):
+        print(
+            "Skyvern updated selector map. "
+            "Retry Selenium extraction."
+        )
+    else:
+        print(
+            "Skyvern discovery did not update selector map."
+        )
 
     return []

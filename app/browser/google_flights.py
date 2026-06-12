@@ -7,6 +7,7 @@ from selenium.webdriver.common.keys import Keys
 from app.browser.selenium_client import browser_session
 from app.browser.selector_registry import load_selector_map
 from app.browser.selector_registry import find_elements_by_selector_list
+from app.agents.skyvern_discovery_agent import discover_google_flights_selectors
 
 from app.config import settings
 
